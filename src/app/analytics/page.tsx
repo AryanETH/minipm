@@ -105,7 +105,7 @@ export default async function AnalyticsPage() {
                 <p className="text-sm text-zinc-600">No data yet</p>
               ) : (
                 <div className="space-y-3">
-                  {topCategories.map((cat) => {
+                  {topCategories.map((cat: { category: string; _count: { _all: number }; _avg: { overallScore: number | null } }) => {
                     const pct = totalIdeas > 0 ? (cat._count._all / totalIdeas) * 100 : 0
                     return (
                       <div key={cat.category}>
