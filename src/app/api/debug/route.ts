@@ -1,3 +1,5 @@
+export const runtime = 'nodejs'
+
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getAllSettings } from '@/lib/settings'

@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { writeFile, unlink } from 'fs/promises'
-import { existsSync } from 'fs'
-import path from 'path'
 import { setSetting } from '@/lib/settings'
+
+export const runtime = 'nodejs'
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 const MAX_SIZE = 5 * 1024 * 1024 // 5 MB
@@ -29,23 +28,14 @@ export async function POST(req: NextRequest) {
       : file.type === 'image/webp' ? 'webp'
       : 'gif'
 
-    // Remove any old avatar files
-    const generatedDir = path.join(process.cwd(), 'public', 'generated')
-    for (const oldExt of ['jpg', 'png', 'webp', 'gif']) {
-      const oldPath = path.join(generatedDir, `avatar.${oldExt}`)
-      if (existsSync(oldPath)) {
-        await unlink(oldPath).catch(() => {})
-      }
-    }
-
-    const filePath = path.join(generatedDir, `avatar.${ext}`)
+    // Store as base64 data URI in the database — works on read-only filesystems (Vercel)
     const buffer = Buffer.from(await file.arrayBuffer())
-    await writeFile(filePath, buffer)
+    const dataUri = `data:${file.type};base64,${buffer.toString('base64')}`
 
-    // Persist the public URL in settings
-    const publicUrl = `/generated/avatar.${ext}`
-    await setSetting('authorAvatarUrl' as never, publicUrl as never)
+    await setSetting('authorAvatarUrl' as never, dataUri as never)
 
+    // Return a stable URL that the browser can load via our files API
+    const publicUrl = `/api/files/avatar.${ext}`
     return NextResponse.json({ url: publicUrl })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Upload failed'

@@ -23,6 +23,8 @@ export interface AppSettings {
   authorName: string
   authorHandle: string
   authorAvatarUrl: string
+  advertLogoUrl: string
+  bgImageUrl: string
   defaultTemplate: string
   // Filter
   minCommentLength: number
@@ -48,6 +50,8 @@ const DEFAULTS: AppSettings = {
   authorName: 'Creator',
   authorHandle: '@creator',
   authorAvatarUrl: '',
+  advertLogoUrl: '',
+  bgImageUrl: '',
   defaultTemplate: 'minimal-dark',
   minCommentLength: 30,
   minCommentLikes: 0,

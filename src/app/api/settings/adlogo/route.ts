@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { writeFile, unlink } from 'fs/promises'
-import { existsSync } from 'fs'
-import path from 'path'
 import { setSetting } from '@/lib/settings'
+
+export const runtime = 'nodejs'
 
 const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml']
 const MAX     = 5 * 1024 * 1024
@@ -22,18 +21,13 @@ export async function POST(req: NextRequest) {
       : file.type === 'image/webp' ? 'webp'
       : 'jpg'
 
-    const dir = path.join(process.cwd(), 'public', 'generated')
-    for (const e of ['jpg','png','webp','svg']) {
-      const p = path.join(dir, `adlogo.${e}`)
-      if (existsSync(p)) await unlink(p).catch(() => {})
-    }
+    // Store as base64 data URI in the database — works on read-only filesystems (Vercel)
+    const buffer = Buffer.from(await file.arrayBuffer())
+    const dataUri = `data:${file.type};base64,${buffer.toString('base64')}`
 
-    const dest = path.join(dir, `adlogo.${ext}`)
-    await writeFile(dest, Buffer.from(await file.arrayBuffer()))
+    await setSetting('advertLogoUrl' as never, dataUri as never)
 
-    const url = `/generated/adlogo.${ext}`
-    await setSetting('advertLogoUrl' as never, url as never)
-
+    const url = `/api/files/adlogo.${ext}`
     return NextResponse.json({ url })
   } catch (err) {
     return NextResponse.json(

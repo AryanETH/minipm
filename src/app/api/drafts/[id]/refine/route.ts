@@ -1,3 +1,5 @@
+export const runtime = 'nodejs'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getAIProvider } from '@/lib/ai'

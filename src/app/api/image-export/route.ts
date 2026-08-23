@@ -7,38 +7,66 @@ import path from 'path'
 import os from 'os'
 import { renderTemplate, IMAGE_FORMATS } from '@/lib/images/templates'
 import type { TemplateKey } from '@/lib/images/templates'
+import { getSetting } from '@/lib/settings'
+import type { AppSettings } from '@/lib/settings'
+
+export const runtime = 'nodejs'
 
 const execFileAsync = promisify(execFile)
 
-// Find the best available Chromium-based browser on Windows
+// Find the best available Chromium-based browser
 function findChrome(): string | null {
   const candidates = [
+    // Linux (Vercel / AWS Lambda)
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+    '/usr/bin/google-chrome-unstable',
+    // Windows
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    process.env.LOCALAPPDATA + '\\Google\\Chrome\\Application\\chrome.exe',
+    process.env.LOCALAPPDATA
+      ? process.env.LOCALAPPDATA + '\\Google\\Chrome\\Application\\chrome.exe'
+      : '',
     'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
     'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-  ]
+  ].filter(Boolean)
   for (const c of candidates) {
     if (existsSync(c)) return c
   }
   return null
 }
 
-// Convert a public-relative URL like /generated/avatar.png into a base64 data URI
-// so the exported HTML is fully self-contained (no network needed by headless Chrome)
-async function resolveAvatarToDataUri(avatarUrl: string): Promise<string> {
-  if (!avatarUrl) return ''
-  // Already a data URI — pass through
-  if (avatarUrl.startsWith('data:')) return avatarUrl
+// Resolve an avatar URL to a base64 data URI.
+// Handles three cases:
+//   1. Already a data URI → return as-is
+//   2. /api/files/<name> URL → read the base64 from the DB
+//   3. Legacy /generated/<file> URL → try to read from disk (local dev fallback)
+async function resolveToDataUri(url: string): Promise<string> {
+  if (!url) return ''
+  if (url.startsWith('data:')) return url
 
+  // New DB-backed URL: /api/files/avatar.png etc.
+  if (url.includes('/api/files/')) {
+    const base = url.split('/api/files/')[1].split('?')[0].replace(/\.[^.]+$/, '')
+    const settingMap: Record<string, keyof AppSettings> = {
+      avatar:  'authorAvatarUrl',
+      adlogo:  'advertLogoUrl',
+      bgimage: 'bgImageUrl',
+    }
+    const key = settingMap[base]
+    if (!key) return ''
+    const stored = await getSetting(key)
+    if (typeof stored === 'string' && stored.startsWith('data:')) return stored
+    return ''
+  }
+
+  // Legacy: local /generated/<file> path on disk (dev only)
   try {
-    // Strip any cache-busting query string before resolving the file path
-    const cleanPath = avatarUrl.split('?')[0]
-    // Map the public URL path to the actual file on disk
+    const cleanPath = url.split('?')[0]
     const filePath = path.join(process.cwd(), 'public', cleanPath.replace(/^\//, ''))
     if (!existsSync(filePath)) return ''
-
     const buffer = await readFile(filePath)
     const ext = path.extname(filePath).toLowerCase().replace('.', '')
     const mime =
@@ -47,7 +75,6 @@ async function resolveAvatarToDataUri(avatarUrl: string): Promise<string> {
       : ext === 'webp' ? 'image/webp'
       : ext === 'gif' ? 'image/gif'
       : 'image/png'
-
     return `data:${mime};base64,${buffer.toString('base64')}`
   } catch {
     return ''
@@ -87,9 +114,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unknown format' }, { status: 400 })
   }
 
-  const avatarDataUri = await resolveAvatarToDataUri(body.avatarUrl || '')
-  const logoDataUri   = await resolveAvatarToDataUri(body.advertLogoUrl || '')
-  const bgDataUri     = await resolveAvatarToDataUri(body.bgImageUrl || '')
+  const avatarDataUri = await resolveToDataUri(body.avatarUrl || '')
+  const logoDataUri   = await resolveToDataUri(body.advertLogoUrl || '')
+  const bgDataUri     = await resolveToDataUri(body.bgImageUrl || '')
 
   const html = renderTemplate(templateId as TemplateKey, {
     headline: body.headline || '',
