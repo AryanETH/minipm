@@ -1,0 +1,206 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Source {
+  id             String    @id @default(cuid())
+  type           String    // CHANNEL | VIDEO | KEYWORD
+  name           String
+  identifier     String
+  handle         String?
+  profileImage   String?
+  enabled        Boolean   @default(true)
+  priority       Int       @default(5)
+  commentsLimit  Int       @default(100)
+  minimumLikes   Int       @default(0)
+  lastCheckedAt  DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  videos   Video[]
+  comments Comment[]
+}
+
+model Video {
+  id           String   @id @default(cuid())
+  youtubeId    String   @unique
+  title        String
+  channelId    String
+  channelTitle String
+  publishedAt  DateTime
+  url          String
+  thumbnailUrl String?
+  viewCount    Int?
+  likeCount    Int?
+  commentCount Int?
+  sourceId     String
+  createdAt    DateTime @default(now())
+
+  source   Source    @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  comments Comment[]
+}
+
+model Comment {
+  id               String   @id @default(cuid())
+  youtubeCommentId String   @unique
+  videoId          String
+  videoTitle       String
+  channelId        String?
+  channelTitle     String?
+  author           String
+  text             String
+  likeCount        Int      @default(0)
+  replyCount       Int      @default(0)
+  publishedAt      DateTime
+  url              String?
+  sourceId         String?
+  discoveredAt     DateTime @default(now())
+  filtered         Boolean  @default(false)
+  filterReason     String?
+  processed        Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  video    Video?  @relation(fields: [videoId], references: [youtubeId])
+  source   Source? @relation(fields: [sourceId], references: [id])
+  idea     Idea?
+}
+
+model Idea {
+  id                String   @id @default(cuid())
+  commentId         String   @unique
+  insightScore      Float
+  noveltyScore      Float
+  relatabilityScore Float
+  controversyScore  Float
+  viralScore        Float
+  originalityScore  Float
+  overallScore      Float
+  category          String
+  coreIdea          String
+  reason            String
+  shouldUse         Boolean  @default(true)
+  status            String   @default("PENDING") // PENDING | SAVED | REJECTED | DRAFTED
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  comment Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  drafts  Draft[]
+}
+
+model Draft {
+  id               String   @id @default(cuid())
+  ideaId           String
+  xContent         String?
+  linkedinContent  String?
+  imageHeadline    String?
+  imageSubheadline String?
+  imageFooter      String?
+  status           String   @default("DRAFT") // DRAFT | APPROVED | REJECTED
+  similarityScore  Float?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  idea            Idea             @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  scheduledPosts  ScheduledPost[]
+  generatedImages GeneratedImage[]
+}
+
+model ImageTemplate {
+  id           String   @id @default(cuid())
+  name         String
+  description  String?
+  format       String   // LINKEDIN_PORTRAIT | SQUARE | X_LANDSCAPE
+  width        Int
+  height       Int
+  htmlTemplate String
+  variables    String
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  generatedImages GeneratedImage[]
+}
+
+model GeneratedImage {
+  id         String   @id @default(cuid())
+  draftId    String
+  templateId String
+  filePath   String
+  format     String
+  variables  String
+  createdAt  DateTime @default(now())
+
+  draft          Draft         @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  template       ImageTemplate @relation(fields: [templateId], references: [id])
+  scheduledPosts ScheduledPost[]
+}
+
+model ScheduledPost {
+  id               String    @id @default(cuid())
+  draftId          String
+  generatedImageId String?
+  platform         String    // X | LINKEDIN
+  content          String
+  imageFilePath    String?
+  scheduledAt      DateTime?
+  status           String    @default("DRAFT") // DRAFT | APPROVED | SCHEDULED | POSTED | FAILED | REJECTED
+  postedAt         DateTime?
+  errorMessage     String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  draft          Draft           @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  generatedImage GeneratedImage? @relation(fields: [generatedImageId], references: [id])
+  publishedPost  PublishedPost?
+}
+
+model PublishedPost {
+  id              String   @id @default(cuid())
+  scheduledPostId String   @unique
+  platform        String
+  externalId      String?
+  url             String?
+  postedAt        DateTime @default(now())
+  impressions     Int?
+  likes           Int?
+  comments        Int?
+  reposts         Int?
+  bookmarks       Int?
+  engagementRate  Float?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  scheduledPost ScheduledPost @relation(fields: [scheduledPostId], references: [id], onDelete: Cascade)
+}
+
+model AnalyticsSnapshot {
+  id        String   @id @default(cuid())
+  date      DateTime
+  metric    String
+  value     Float
+  dimension String?
+  createdAt DateTime @default(now())
+}
+
+model Settings {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model AIProfile {
+  id           String   @id @default(cuid())
+  authorName   String   @default("Creator")
+  handle       String   @default("@creator")
+  topics       String   @default("AI,startups,technology,products")
+  writingStyle String   @default("simple,conversational,opinionated")
+  avoidTopics  String   @default("")
+  blockedWords String   @default("")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

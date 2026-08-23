@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Content Engine
 
-## Getting Started
+A local-first AI-powered content intelligence dashboard.
 
-First, run the development server:
+**YouTube comments → AI analysis → Original posts → X & LinkedIn**
+
+Runs entirely on your Windows laptop. No paid SaaS. No cloud. ₹0/month.
+
+---
+
+## Quick Start
 
 ```bash
+# 1. Install dependencies
+npm install
+
+# 2. Copy and configure environment
+copy .env.example .env
+# Edit .env — add YOUTUBE_API_KEY
+
+# 3. Initialize database
+npx prisma migrate dev --name init
+npx tsx prisma/seed.ts
+
+# 4. Start Ollama (separate terminal)
+ollama pull qwen2.5-coder:7b
+ollama serve
+
+# 5. Start the app
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open **http://localhost:3000**
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## What it does
 
-## Learn More
+1. **Discover** — Scans YouTube channels, videos, and keywords via the official API
+2. **Filter** — Removes spam, emoji-only, and low-value comments automatically  
+3. **Analyze** — Ollama LLM scores every comment (insight, novelty, virality, originality)
+4. **Inbox** — Review top ideas with scores and AI reasoning
+5. **Generate** — One click creates X post + LinkedIn post + image card text
+6. **Edit** — Refine drafts with AI actions (shorten, expand, more controversial...)
+7. **Queue** — Schedule posts with date/time picker
+8. **Publish** — Copy → post manually → mark as posted (API publishing in Phase 2)
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Stack
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **Next.js 16** + TypeScript + Tailwind CSS
+- **SQLite** + Prisma 7 (local database, no cloud)
+- **Ollama** for local AI (qwen2.5-coder:7b, llama3, gemma3)
+- **YouTube Data API v3** for content discovery
+- **HTML/CSS templates** for image cards (no paid design APIs)
+- **n8n** for automation workflows (optional)
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Full Setup Guide
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See [docs/SETUP.md](docs/SETUP.md)
