@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-// @ts-expect-error — no types for google-play-scraper
-import gplay from 'google-play-scraper'
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const gplay = require('google-play-scraper') as Record<string, unknown>
 
 function extractAppId(input: string): string {
   // Accept either a raw app ID like "com.instagram.android"
@@ -39,15 +39,17 @@ export async function POST(req: NextRequest) {
     // so we fetch all and filter client-side. We over-fetch to account for filtering.
     const fetchCount = Math.min(count * stars.length * 3, 2000)
 
-    const Sort = gplay.sort as Record<string, number>
+    const Sort = (gplay.sort as unknown) as Record<string, number>
 
-    const result: Record<string, unknown>[] = await gplay.reviews({
+    const rawResult = await (gplay.reviews as (opts: unknown) => Promise<{ data: Record<string, unknown>[] }>)({
       appId,
       lang: 'en',
       country: 'us',
       sort: Sort.NEWEST,
       num: fetchCount,
-    }).then((r: { data: Record<string, unknown>[] }) => r.data)
+    })
+
+    const result: Record<string, unknown>[] = rawResult.data
 
     // Filter by selected star ratings
     const filtered = result.filter(

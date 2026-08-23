@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-// @ts-expect-error — no types
-import gplay from 'google-play-scraper'
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const gplay = require('google-play-scraper') as Record<string, (...args: unknown[]) => Promise<unknown>>
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
         } catch { /* not a URL */ }
 
         try {
-          const app = await gplay.app({ appId, lang: 'en', country: 'us' }) as Record<string, unknown>
+          const app = await (gplay.app as (opts: unknown) => Promise<Record<string, unknown>>)({ appId, lang: 'en', country: 'us' })
           return {
             appId,
             title: app.title ?? '',

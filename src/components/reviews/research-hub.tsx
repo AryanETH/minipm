@@ -338,18 +338,23 @@ export function ResearchHub() {
         result.rows.map(r => [r.title, r.author, r.score, r.numComments, fmt(r.at), r.url, r.content])
       )
       triggerDownload(csv, `${slug}-results.csv`, 'text/csv')
-    } else {
+    } else if (result.kind === 'meta') {
       csv = toCSV(
         ['App ID', 'Title', 'Developer', 'Score', 'Ratings', 'Installs', 'Version', 'Updated', 'Genre'],
         result.rows.map(r => [r.appId, r.title, r.developer, r.score, r.ratings, r.installs, r.version, r.updated, r.genre])
       )
       triggerDownload(csv, 'app-metadata.csv', 'text/csv')
     }
+    // igvideo — no CSV export
   }
 
   const downloadJSON = () => {
     if (!result) return
-    const rows = result.kind === 'reviews' ? result.rows : result.kind === 'posts' ? result.rows : result.rows
+    if (result.kind === 'igvideo') {
+      triggerDownload(JSON.stringify(result.video, null, 2), `${activeTool}-result.json`, 'application/json')
+      return
+    }
+    const rows = result.rows
     triggerDownload(JSON.stringify(rows, null, 2), `${activeTool}-results.json`, 'application/json')
   }
 
@@ -547,8 +552,8 @@ export function ResearchHub() {
             <div className="flex items-center justify-between px-6 py-2.5 border-b border-zinc-800 flex-shrink-0 gap-3 flex-wrap">
               <div className="flex items-center gap-3 text-xs flex-wrap">
                 <span className="font-medium text-zinc-200">
-                  {result.kind === 'reviews' ? displayedReviews.length : result.kind === 'posts' ? displayedPosts.length : result.kind === 'igvideo' ? 1 : result.rows.length}
-                  {' '}<span className="text-zinc-500">/ {result.kind === 'reviews' ? result.rows.length : result.kind === 'posts' ? result.rows.length : result.kind === 'igvideo' ? 1 : result.rows.length} results</span>
+                  {result.kind === 'reviews' ? displayedReviews.length : result.kind === 'posts' ? displayedPosts.length : result.rows.length}
+                  {' '}<span className="text-zinc-500">/ {result.kind === 'reviews' ? result.rows.length : result.kind === 'posts' ? result.rows.length : result.rows.length} results</span>
                 </span>
                 {result.kind === 'reviews' && result.stars.map(s => <StarBadge key={s} s={s} />)}
               </div>
