@@ -3,8 +3,14 @@ import { prisma } from '@/lib/db'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { BarChart2, TrendingUp, Zap, MessageSquare } from 'lucide-react'
 import { formatNumber } from '@/lib/utils'
+import type { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
+
+type CategoryGroup = Prisma.IdeaGroupByOutputType & {
+  _count: { _all: number }
+  _avg: { overallScore: number | null }
+}
 
 export default async function AnalyticsPage() {
   const [
@@ -105,7 +111,7 @@ export default async function AnalyticsPage() {
                 <p className="text-sm text-zinc-600">No data yet</p>
               ) : (
                 <div className="space-y-3">
-                  {topCategories.map((cat: { category: string; _count: { _all: number }; _avg: { overallScore: number | null } }) => {
+                  {(topCategories as CategoryGroup[]).map((cat) => {
                     const pct = totalIdeas > 0 ? (cat._count._all / totalIdeas) * 100 : 0
                     return (
                       <div key={cat.category}>

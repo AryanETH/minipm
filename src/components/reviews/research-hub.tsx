@@ -552,8 +552,8 @@ export function ResearchHub() {
             <div className="flex items-center justify-between px-6 py-2.5 border-b border-zinc-800 flex-shrink-0 gap-3 flex-wrap">
               <div className="flex items-center gap-3 text-xs flex-wrap">
                 <span className="font-medium text-zinc-200">
-                  {result.kind === 'reviews' ? displayedReviews.length : result.kind === 'posts' ? displayedPosts.length : result.rows.length}
-                  {' '}<span className="text-zinc-500">/ {result.kind === 'reviews' ? result.rows.length : result.kind === 'posts' ? result.rows.length : result.rows.length} results</span>
+                  {result.kind === 'reviews' ? displayedReviews.length : result.kind === 'posts' ? displayedPosts.length : result.kind === 'meta' ? result.rows.length : 0}
+                  {' '}<span className="text-zinc-500">/ {result.kind === 'reviews' ? result.rows.length : result.kind === 'posts' ? result.rows.length : result.kind === 'meta' ? result.rows.length : 0} results</span>
                 </span>
                 {result.kind === 'reviews' && result.stars.map(s => <StarBadge key={s} s={s} />)}
               </div>

@@ -15,6 +15,10 @@ import { Badge } from '@/components/ui/badge'
 import { formatNumber, scoreColor } from '@/lib/utils'
 import { format } from 'date-fns'
 import Link from 'next/link'
+import type { Prisma } from '@prisma/client'
+
+type ScheduledPostWithDraft = Prisma.ScheduledPostGetPayload<{ include: { draft: true } }>
+type IdeaWithComment = Prisma.IdeaGetPayload<{ include: { comment: { include: { source: true } } } }>
 
 async function getStats() {
   const today = new Date()
@@ -121,7 +125,7 @@ export async function DashboardContent() {
               </div>
             ) : (
               <div className="space-y-2">
-                {stats.todayQueue.map((post) => (
+                {stats.todayQueue.map((post: ScheduledPostWithDraft) => (
                   <div
                     key={post.id}
                     className="flex items-center gap-3 p-3 rounded-md bg-zinc-800/40 hover:bg-zinc-800/60 transition-colors"
@@ -166,7 +170,7 @@ export async function DashboardContent() {
               </div>
             ) : (
               <div className="space-y-2">
-                {stats.topIdeas.map((idea) => (
+                {stats.topIdeas.map((idea: IdeaWithComment) => (
                   <Link
                     key={idea.id}
                     href={`/inbox?idea=${idea.id}`}

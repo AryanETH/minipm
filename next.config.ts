@@ -2,11 +2,9 @@ import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
   typescript: {
-    // Prisma types are generated at build time — type errors are caught locally
+    // Prisma client is generated at build time via `prisma generate && next build`
+    // Type errors are caught locally with `tsc --noEmit`
     ignoreBuildErrors: true,
-  },
-  eslint: {
-    ignoreDuringBuilds: true,
   },
   images: {
     remotePatterns: [

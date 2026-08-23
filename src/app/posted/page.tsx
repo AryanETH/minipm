@@ -4,8 +4,21 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Share2, Briefcase, CheckCircle2 } from 'lucide-react'
 import { format } from 'date-fns'
+import type { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
+
+type PublishedPostWithRelations = Prisma.PublishedPostGetPayload<{
+  include: {
+    scheduledPost: {
+      include: {
+        draft: {
+          include: { idea: true }
+        }
+      }
+    }
+  }
+}>
 
 export default async function PostedPage() {
   const published = await prisma.publishedPost.findMany({
@@ -36,7 +49,7 @@ export default async function PostedPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {published.map((p) => (
+            {published.map((p: PublishedPostWithRelations) => (
               <Card key={p.id} className="hover:border-zinc-700 transition-all">
                 <CardContent className="p-4 flex items-center gap-4">
                   <div className="shrink-0">
