@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react'
 import {
   Loader2, Search, Download, Star, FileText, Sheet,
-  ExternalLink, ChevronRight,
+  ExternalLink, ChevronRight, Copy, Check, AlertCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -186,11 +186,14 @@ interface AppMeta {
 
 interface InstagramVideo {
   url: string
+  shortcode: string
+  videoUrl: string
+  downloadUrl: string
   thumbnail: string
   caption: string
-  downloadUrl: string
   width?: number
   height?: number
+  hasVideo: boolean
 }
 
 type ResultData =
@@ -681,46 +684,7 @@ export function ResearchHub() {
               </table>
             ) : result.kind === 'igvideo' ? (
               /* Instagram Video downloader */
-              <div className="flex flex-col items-center justify-center h-full p-8">
-                <div className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-                  {result.video.thumbnail && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={result.video.thumbnail}
-                      alt="Video thumbnail"
-                      className="w-full aspect-video object-cover"
-                    />
-                  )}
-                  <div className="p-5 space-y-4">
-                    {result.video.caption && (
-                      <p className="text-sm text-zinc-300 line-clamp-3">{result.video.caption}</p>
-                    )}
-                    <div className="flex items-center gap-3">
-                      <a
-                        href={result.video.downloadUrl}
-                        download
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-pink-600 hover:bg-pink-500 text-white text-sm font-semibold transition-colors"
-                      >
-                        <Download className="w-4 h-4" />
-                        Download Video
-                      </a>
-                      <a
-                        href={result.video.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-4 py-2.5 rounded-lg border border-zinc-700 text-zinc-400 hover:text-zinc-200 text-sm transition-colors"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-                    </div>
-                    {result.video.width && result.video.height && (
-                      <p className="text-[11px] text-zinc-600 text-center">{result.video.width} × {result.video.height}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <InstagramResult video={result.video} />
             ) : (
               /* App metadata table */
               <div className="p-6">
@@ -776,6 +740,146 @@ export function ResearchHub() {
             </div>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Instagram Result Component ───────────────────────────────────────────────
+
+function InstagramResult({ video }: { video: InstagramVideo }) {
+  const [copied, setCopied] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+
+  const copyUrl = async () => {
+    await navigator.clipboard.writeText(video.url)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const downloadVideo = async () => {
+    if (!video.downloadUrl) return
+    setDownloading(true)
+    try {
+      const res = await fetch(video.downloadUrl)
+      if (!res.ok) throw new Error(`Download failed: ${res.status}`)
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href = url
+      a.download = `instagram-${video.shortcode || 'video'}.mp4`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Download failed', variant: 'destructive' })
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full p-6 overflow-auto">
+      <div className="w-full max-w-xl space-y-4">
+
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+            📸
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-zinc-100">Instagram Media</p>
+            <p className="text-[11px] text-zinc-500 font-mono truncate max-w-xs">{video.url}</p>
+          </div>
+          <a href={video.url} target="_blank" rel="noopener noreferrer"
+            className="ml-auto text-zinc-500 hover:text-zinc-300 transition-colors flex-shrink-0">
+            <ExternalLink className="w-4 h-4" />
+          </a>
+        </div>
+
+        {/* Thumbnail */}
+        {video.thumbnail ? (
+          <div className="rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900 aspect-video flex items-center justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={video.thumbnail}
+              alt="Thumbnail"
+              className="w-full h-full object-cover"
+              onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+            />
+          </div>
+        ) : (
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 aspect-video flex items-center justify-center">
+            <p className="text-zinc-600 text-sm">No thumbnail available</p>
+          </div>
+        )}
+
+        {/* Caption */}
+        {video.caption && (
+          <p className="text-sm text-zinc-300 leading-relaxed line-clamp-4 bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3">
+            {video.caption}
+          </p>
+        )}
+
+        {/* Dimensions */}
+        {video.width && video.height && (
+          <p className="text-[11px] text-zinc-600 text-center">{video.width} × {video.height}px</p>
+        )}
+
+        {/* Video status */}
+        {!video.hasVideo && (
+          <div className="flex items-start gap-2 px-4 py-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium">Video URL not extracted</p>
+              <p className="text-amber-400/70 mt-0.5">
+                Instagram blocked direct extraction. The thumbnail and caption were retrieved.
+                Open the post in your browser to download the video manually.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex gap-2 flex-wrap">
+          {/* Download via proxy */}
+          {video.hasVideo && (
+            <button
+              type="button"
+              onClick={downloadVideo}
+              disabled={downloading}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-sm font-semibold transition-all disabled:opacity-60"
+            >
+              {downloading
+                ? <><Loader2 className="w-4 h-4 animate-spin" />Downloading…</>
+                : <><Download className="w-4 h-4" />Download MP4</>}
+            </button>
+          )}
+
+          {/* Open post */}
+          <a
+            href={video.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-zinc-700 text-zinc-300 hover:text-zinc-100 hover:border-zinc-500 text-sm font-medium transition-colors"
+          >
+            <ExternalLink className="w-4 h-4" />
+            Open Post
+          </a>
+
+          {/* Copy URL */}
+          <button
+            type="button"
+            onClick={copyUrl}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-zinc-700 text-zinc-300 hover:text-zinc-100 hover:border-zinc-500 text-sm font-medium transition-colors"
+          >
+            {copied ? <><Check className="w-4 h-4 text-emerald-400" />Copied!</> : <><Copy className="w-4 h-4" />Copy URL</>}
+          </button>
+        </div>
+
+        {/* Note */}
+        <p className="text-[11px] text-zinc-700 text-center">
+          Works on public posts · Private accounts require login · Instagram may block repeated requests
+        </p>
       </div>
     </div>
   )
