@@ -5,12 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toaster'
-import { CheckCircle2, Loader2, Upload, User, Pen } from 'lucide-react'
+import { CheckCircle2, Loader2, Upload, User, Pen, X } from 'lucide-react'
+import { getLocalImage, storeLocalImage, clearLocalImage } from '@/lib/local-images'
 
 interface Settings {
   authorName: string
   authorHandle: string
-  authorAvatarUrl: string
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -24,38 +24,45 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 }
 
 export function SettingsClient() {
-  const [settings, setSettings] = useState<Settings | null>(null)
-  const [saving, setSaving] = useState(false)
+  const [settings, setSettings]           = useState<Settings | null>(null)
+  const [avatarDataUri, setAvatarDataUri] = useState('')
+  const [saving, setSaving]               = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
 
+  // Load name/handle from API, avatar from localStorage
   useEffect(() => {
     fetch('/api/settings')
       .then(r => r.json())
       .then(d => {
         const s = d as Record<string, string>
         setSettings({
-          authorName: s.authorName || '',
+          authorName:   s.authorName   || '',
           authorHandle: s.authorHandle || '',
-          authorAvatarUrl: s.authorAvatarUrl || '',
         })
       })
+      .catch(() => setSettings({ authorName: '', authorHandle: '' }))
+
+    // Avatar lives in the browser
+    setAvatarDataUri(getLocalImage('avatar'))
   }, [])
 
   const uploadAvatar = async (file: File) => {
     setUploadingAvatar(true)
     try {
-      const fd = new FormData()
-      fd.append('avatar', file)
-      const res = await fetch('/api/settings/avatar', { method: 'POST', body: fd })
-      const data = await res.json() as { url?: string; error?: string }
-      if (!res.ok) throw new Error(data.error || 'Upload failed')
-      setSettings(p => p ? { ...p, authorAvatarUrl: data.url! + '?t=' + Date.now() } : p)
-      toast({ title: 'Avatar saved', variant: 'success' })
+      const dataUri = await storeLocalImage('avatar', file)
+      setAvatarDataUri(dataUri)
+      toast({ title: 'Avatar saved in browser', variant: 'success' })
     } catch (err) {
       toast({ title: err instanceof Error ? err.message : 'Upload failed', variant: 'destructive' })
     } finally {
       setUploadingAvatar(false)
     }
+  }
+
+  const removeAvatar = () => {
+    clearLocalImage('avatar')
+    setAvatarDataUri('')
+    toast({ title: 'Avatar removed', variant: 'success' })
   }
 
   const save = async () => {
@@ -66,7 +73,7 @@ export function SettingsClient() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          authorName: settings.authorName,
+          authorName:   settings.authorName,
           authorHandle: settings.authorHandle,
         }),
       })
@@ -100,12 +107,15 @@ export function SettingsClient() {
         <CardContent className="space-y-6">
 
           {/* Avatar */}
-          <Field label="Profile photo" hint="Shown in tweet card images. JPEG / PNG / WebP up to 5 MB.">
+          <Field
+            label="Profile photo"
+            hint="Saved in your browser — no upload needed. JPEG / PNG / WebP up to 5 MB."
+          >
             <div className="flex items-center gap-4">
               <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-zinc-700 flex-shrink-0 bg-zinc-800 flex items-center justify-center">
-                {settings.authorAvatarUrl ? (
+                {avatarDataUri ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={settings.authorAvatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                  <img src={avatarDataUri} alt="Avatar" className="w-full h-full object-cover" />
                 ) : (
                   <User className="w-7 h-7 text-zinc-500" />
                 )}
@@ -114,7 +124,7 @@ export function SettingsClient() {
                 <label htmlFor="avatar-upload">
                   <div className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md border border-zinc-700 bg-zinc-900 text-zinc-300 cursor-pointer hover:border-zinc-500 hover:text-zinc-100 transition-colors ${uploadingAvatar ? 'opacity-50 pointer-events-none' : ''}`}>
                     {uploadingAvatar ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                    {uploadingAvatar ? 'Uploading…' : 'Upload photo'}
+                    {uploadingAvatar ? 'Saving…' : 'Upload photo'}
                   </div>
                 </label>
                 <input
@@ -128,10 +138,21 @@ export function SettingsClient() {
                     e.target.value = ''
                   }}
                 />
-                {settings.authorAvatarUrl && (
-                  <span className="text-[11px] text-emerald-400 flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> Photo set
-                  </span>
+                {avatarDataUri ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-emerald-400 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Photo set
+                    </span>
+                    <button
+                      type="button"
+                      onClick={removeAvatar}
+                      className="text-[11px] text-zinc-600 hover:text-red-400 flex items-center gap-0.5 transition-colors"
+                    >
+                      <X className="w-2.5 h-2.5" /> Remove
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-zinc-600">Stored locally in your browser</p>
                 )}
               </div>
             </div>

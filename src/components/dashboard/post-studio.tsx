@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { toast } from '@/components/ui/toaster'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { TEMPLATE_METADATA } from '@/lib/images/templates'
+import { getLocalImage, storeLocalImage, clearLocalImage } from '@/lib/local-images'
 
 const CHAR_LIMIT = 400
 
@@ -120,14 +121,14 @@ export function PostStudio() {
   // Ad strip state
   const [adOpen,     setAdOpen]     = useState(false)
   const [adOn,       setAdOn]       = useState(false)
-  const [adLogoUrl,  setAdLogoUrl]  = useState('')   // uploaded logo public URL
+  const [adLogoUrl,  setAdLogoUrl]  = useState('')   // base64 data URI from localStorage
   const [adLogoText, setAdLogoText] = useState('')   // fallback text
   const [adTagline,  setAdTagline]  = useState('')
   const [adColor,    setAdColor]    = useState('#6366f1')
   const [uploadingLogo, setUploadingLogo] = useState(false)
 
   // Yourstory template state
-  const [bgImageUrl,    setBgImageUrl]    = useState('')
+  const [bgImageUrl,    setBgImageUrl]    = useState('')  // base64 data URI from localStorage
   const [accentColor,   setAccentColor]   = useState('#22c55e')
   const [brandName,     setBrandName]     = useState('BRAND')
   const [categoryLabel, setCategoryLabel] = useState('NEWS')
@@ -135,19 +136,51 @@ export function PostStudio() {
 
   const [downloading, setDownloading] = useState(false)
 
-  // Load profile
+  // Load profile name/handle from API; images from localStorage
   useEffect(() => {
     fetch('/api/settings')
       .then(r => r.json())
       .then((d: Record<string, string>) => setProfile({
-        authorName:    d.authorName    || 'Creator',
-        authorHandle:  d.authorHandle  || '@creator',
-        authorAvatarUrl: d.authorAvatarUrl || '',
+        authorName:      d.authorName    || 'Creator',
+        authorHandle:    d.authorHandle  || '@creator',
+        authorAvatarUrl: getLocalImage('avatar'),  // always read from browser storage
       }))
-      .catch(() => {})
+      .catch(() => {
+        setProfile(p => ({ ...p, authorAvatarUrl: getLocalImage('avatar') }))
+      })
+
+    // Load ad logo + bg image from localStorage
+    setAdLogoUrl(getLocalImage('adlogo'))
+    setBgImageUrl(getLocalImage('bgimage'))
   }, [])
 
-  // Init editor once
+  // Upload brand logo — stored in browser localStorage
+  const uploadLogo = async (file: File) => {
+    setUploadingLogo(true)
+    try {
+      const dataUri = await storeLocalImage('adlogo', file)
+      setAdLogoUrl(dataUri)
+      toast({ title: 'Brand logo saved in browser', variant: 'success' })
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Upload failed', variant: 'destructive' })
+    } finally {
+      setUploadingLogo(false)
+    }
+  }
+
+  // Upload background image — stored in browser localStorage
+  const uploadBg = async (file: File) => {
+    setUploadingBg(true)
+    try {
+      const dataUri = await storeLocalImage('bgimage', file)
+      setBgImageUrl(dataUri)
+      toast({ title: 'Background image saved in browser', variant: 'success' })
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Upload failed', variant: 'destructive' })
+    } finally {
+      setUploadingBg(false)
+    }
+  }
   useEffect(() => {
     if (!initialised.current && editorRef.current) {
       editorRef.current.innerHTML = markdownToHtml(markdown)
@@ -169,64 +202,49 @@ export function PostStudio() {
     syncFromEditor()
   }, [syncFromEditor])
 
-  // Upload brand logo
-  const uploadLogo = async (file: File) => {
-    setUploadingLogo(true)
-    try {
-      const fd = new FormData()
-      fd.append('logo', file)
-      const res  = await fetch('/api/settings/adlogo', { method: 'POST', body: fd })
-      const data = await res.json() as { url?: string; error?: string }
-      if (!res.ok) throw new Error(data.error || 'Upload failed')
-      setAdLogoUrl(data.url! + '?t=' + Date.now())
-      toast({ title: 'Brand logo saved', variant: 'success' })
-    } catch (err) {
-      toast({ title: err instanceof Error ? err.message : 'Upload failed', variant: 'destructive' })
-    } finally {
-      setUploadingLogo(false)
-    }
-  }
-
-  // Upload background image (Yourstory template)
-  const uploadBg = async (file: File) => {
-    setUploadingBg(true)
-    try {
-      const fd = new FormData()
-      fd.append('image', file)
-      const res  = await fetch('/api/settings/bgimage', { method: 'POST', body: fd })
-      const data = await res.json() as { url?: string; error?: string }
-      if (!res.ok) throw new Error(data.error || 'Upload failed')
-      setBgImageUrl(data.url! + '?t=' + Date.now())
-      toast({ title: 'Background image saved', variant: 'success' })
-    } catch (err) {
-      toast({ title: err instanceof Error ? err.message : 'Upload failed', variant: 'destructive' })
-    } finally {
-      setUploadingBg(false)
-    }
-  }
-
   const charCount = stripMd(markdown).length
   const isOver    = charCount > CHAR_LIMIT
 
-  const previewUrl = useMemo(() => {
-    const p = new URLSearchParams({
-      templateId: tplId, format,
-      postBody: markdown,
-      author: profile.authorName, handle: profile.authorHandle,
-      avatarUrl: profile.authorAvatarUrl,
-      verified: 'true', headline: '', subheadline: '', category: '',
-      advertMode: String(adOn),
-      advertLogoUrl: adLogoUrl,
-      advertLogoText: adLogoText,
-      advertTagline: adTagline,
-      advertBgColor: adColor,
-      bgImageUrl,
-      accentColor,
-      brandName,
-      categoryLabel,
-    })
-    return `/api/image-preview?${p.toString()}`
-  }, [markdown, format, tplId, profile, adOn, adLogoUrl, adLogoText, adTagline, adColor, bgImageUrl, accentColor, brandName, categoryLabel])
+  // Build preview params (no avatar in URL — passed via POST to avoid huge query strings)
+  const previewParams = useMemo(() => ({
+    templateId: tplId, format,
+    postBody: markdown,
+    author: profile.authorName, handle: profile.authorHandle,
+    avatarUrl: profile.authorAvatarUrl,   // data URI — passed in POST body only
+    verified: true, headline: '', subheadline: '', category: '',
+    advertMode: adOn,
+    advertLogoUrl: adLogoUrl,
+    advertLogoText: adLogoText,
+    advertTagline: adTagline,
+    advertBgColor: adColor,
+    bgImageUrl,
+    accentColor,
+    brandName,
+    categoryLabel,
+  }), [markdown, format, tplId, profile, adOn, adLogoUrl, adLogoText, adTagline, adColor, bgImageUrl, accentColor, brandName, categoryLabel])
+
+  // Blob URL for the iframe — fetched via POST so data URIs aren't in the query string
+  const [previewBlobUrl, setPreviewBlobUrl] = useState('')
+  const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (!markdown.trim()) { setPreviewBlobUrl(''); return }
+    if (previewTimer.current) clearTimeout(previewTimer.current)
+    previewTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/image-preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(previewParams),
+        })
+        if (!res.ok) return
+        const html = await res.text()
+        const blob = new Blob([html], { type: 'text/html' })
+        const url  = URL.createObjectURL(blob)
+        setPreviewBlobUrl(prev => { if (prev) URL.revokeObjectURL(prev); return url })
+      } catch { /* ignore preview errors */ }
+    }, 300)
+    return () => { if (previewTimer.current) clearTimeout(previewTimer.current) }
+  }, [previewParams, markdown])
 
   const download = async (ext: 'png' | 'jpg') => {
     if (!markdown.trim()) { toast({ title: 'Write something first', variant: 'destructive' }); return }
@@ -235,25 +253,10 @@ export function PostStudio() {
       const res = await fetch('/api/image-export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          templateId: tplId, format, ext,
-          postBody: markdown,
-          author: profile.authorName, handle: profile.authorHandle,
-          avatarUrl: profile.authorAvatarUrl,
-          verified: true, headline: '', subheadline: '', category: '',
-          advertMode: adOn,
-          advertLogoUrl: adLogoUrl,
-          advertLogoText: adLogoText,
-          advertTagline: adTagline,
-          advertBgColor: adColor,
-          bgImageUrl,
-          accentColor,
-          brandName,
-          categoryLabel,
-        }),
+        body: JSON.stringify({ ...previewParams, ext }),
       })
       if (res.status === 422) {
-        window.open(previewUrl, '_blank')
+        if (previewBlobUrl) window.open(previewBlobUrl, '_blank')
         toast({ title: 'Chrome not found', description: 'Opened in browser — right-click to save.', variant: 'default' })
         return
       }
@@ -535,7 +538,7 @@ export function PostStudio() {
           {/* Download */}
           <div className="mt-auto space-y-2">
             <Button variant="secondary" size="sm" className="w-full gap-2"
-              onClick={() => window.open(previewUrl, '_blank')} disabled={!markdown.trim()}>
+              onClick={() => previewBlobUrl && window.open(previewBlobUrl, '_blank')} disabled={!markdown.trim()}>
               <ExternalLink className="w-3.5 h-3.5" /> Open full size
             </Button>
             <div className="grid grid-cols-2 gap-2">
@@ -573,7 +576,7 @@ export function PostStudio() {
           {markdown.trim() ? (
             <div className="w-full h-full flex flex-col items-center gap-3">
               <div className="flex-1 w-full min-h-0">
-                <ScaledPreview src={previewUrl} fmt={format} />
+                <ScaledPreview src={previewBlobUrl} fmt={format} />
               </div>
               <p className="text-xs text-zinc-600 flex-shrink-0">
                 {FORMATS.find(f => f.value === format)?.label} · {TEMPLATE_METADATA.find(t => t.id === tplId)?.name}

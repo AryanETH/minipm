@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Share2,
@@ -26,6 +26,7 @@ import { scoreColor, formatNumber } from '@/lib/utils'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { format } from 'date-fns'
+import { getLocalImage } from '@/lib/local-images'
 
 type Draft = {
   id: string
@@ -103,14 +104,16 @@ export function DraftEditor({ draft: initialDraft }: { draft: Draft }) {
     fetch('/api/settings')
       .then((r) => r.json())
       .then((d) => {
-        const s = d as { authorName?: string; authorHandle?: string; authorAvatarUrl?: string }
+        const s = d as { authorName?: string; authorHandle?: string }
         setProfile({
-          authorName: s.authorName || 'Creator',
-          authorHandle: s.authorHandle || '@creator',
-          authorAvatarUrl: s.authorAvatarUrl || '',
+          authorName:      s.authorName    || 'Creator',
+          authorHandle:    s.authorHandle  || '@creator',
+          authorAvatarUrl: getLocalImage('avatar'),  // read from browser storage
         })
       })
-      .catch(() => {})
+      .catch(() => {
+        setProfile(p => ({ ...p, authorAvatarUrl: getLocalImage('avatar') }))
+      })
   }, [])
 
   const save = async (updates: Partial<typeof draft>) => {
@@ -181,7 +184,40 @@ export function DraftEditor({ draft: initialDraft }: { draft: Draft }) {
     }
   }
 
-  const imagePreviewUrl = `/api/image-preview?templateId=${templateId}&format=${imageFormat}&headline=${encodeURIComponent(draft.imageHeadline || '')}&subheadline=${encodeURIComponent(draft.imageSubheadline || '')}&author=${encodeURIComponent(profile.authorName)}&handle=${encodeURIComponent(profile.authorHandle)}&category=${encodeURIComponent(draft.idea.category)}&avatarUrl=${encodeURIComponent(profile.authorAvatarUrl)}&postBody=${encodeURIComponent(draft.xContent || draft.imageHeadline || '')}`
+  const imagePreviewParams = useMemo(() => ({
+    templateId,
+    format: imageFormat,
+    headline:    draft.imageHeadline    || '',
+    subheadline: draft.imageSubheadline || '',
+    author:      profile.authorName,
+    handle:      profile.authorHandle,
+    category:    draft.idea.category,
+    avatarUrl:   profile.authorAvatarUrl,
+    verified:    true,
+    postBody:    draft.xContent || draft.imageHeadline || '',
+  }), [templateId, imageFormat, draft, profile])
+
+  // Blob URL for preview iframe
+  const [previewBlobUrl, setPreviewBlobUrl] = useState('')
+  const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (previewTimer.current) clearTimeout(previewTimer.current)
+    previewTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/image-preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(imagePreviewParams),
+        })
+        if (!res.ok) return
+        const html = await res.text()
+        const blob = new Blob([html], { type: 'text/html' })
+        const url  = URL.createObjectURL(blob)
+        setPreviewBlobUrl(prev => { if (prev) URL.revokeObjectURL(prev); return url })
+      } catch { /* ignore */ }
+    }, 300)
+    return () => { if (previewTimer.current) clearTimeout(previewTimer.current) }
+  }, [imagePreviewParams])
 
   const downloadImage = async (ext: 'png' | 'jpg') => {
     setDownloading(true)
@@ -189,24 +225,11 @@ export function DraftEditor({ draft: initialDraft }: { draft: Draft }) {
       const res = await fetch('/api/image-export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          templateId,
-          format: imageFormat,
-          headline: draft.imageHeadline || '',
-          subheadline: draft.imageSubheadline || '',
-          author: profile.authorName,
-          handle: profile.authorHandle,
-          category: draft.idea.category,
-          avatarUrl: profile.authorAvatarUrl,
-          verified: true,
-          postBody: draft.xContent || draft.imageHeadline || '',
-          ext,
-        }),
+        body: JSON.stringify({ ...imagePreviewParams, ext }),
       })
 
       if (res.status === 422) {
-        // No Chrome found — open preview in browser as fallback
-        window.open(imagePreviewUrl, '_blank')
+        if (previewBlobUrl) window.open(previewBlobUrl, '_blank')
         toast({
           title: 'Chrome not found',
           description: 'Opened in browser — right-click the image and save, or use Print → Save as PDF.',
@@ -509,12 +532,10 @@ export function DraftEditor({ draft: initialDraft }: { draft: Draft }) {
                       <Button
                         variant="secondary"
                         size="sm"
-                        asChild
+                        onClick={() => previewBlobUrl && window.open(previewBlobUrl, '_blank')}
                       >
-                        <a href={imagePreviewUrl} target="_blank" rel="noopener noreferrer">
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          Preview
-                        </a>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        Preview
                       </Button>
                       <Button
                         variant="outline"
@@ -542,7 +563,7 @@ export function DraftEditor({ draft: initialDraft }: { draft: Draft }) {
                     <p className="text-xs text-zinc-600 p-2 border-b border-zinc-800">Preview (scaled)</p>
                     <div className="relative w-full" style={{ paddingBottom: imageFormat === 'LINKEDIN_PORTRAIT' ? '125%' : imageFormat === 'X_LANDSCAPE' ? '56.25%' : '100%' }}>
                       <iframe
-                        src={imagePreviewUrl}
+                        src={previewBlobUrl}
                         className="absolute inset-0 w-full h-full border-0"
                         title="Image preview"
                       />

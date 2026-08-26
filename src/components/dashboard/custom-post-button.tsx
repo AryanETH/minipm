@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toaster'
+import { getLocalImage } from '@/lib/local-images'
 import {
   Select,
   SelectContent,
@@ -145,12 +146,14 @@ export function CustomPostButton() {
       .then((d) => {
         const s = d as Partial<Profile>
         setProfile({
-          authorName: s.authorName || 'Creator',
-          authorHandle: s.authorHandle || '@creator',
-          authorAvatarUrl: s.authorAvatarUrl || '',
+          authorName:      s.authorName    || 'Creator',
+          authorHandle:    s.authorHandle  || '@creator',
+          authorAvatarUrl: getLocalImage('avatar'),  // read from browser storage
         })
       })
-      .catch(() => {})
+      .catch(() => {
+        setProfile(p => ({ ...p, authorAvatarUrl: getLocalImage('avatar') }))
+      })
   }, [open])
 
   // Sync markdown → editor HTML only on first open (don't clobber cursor)
@@ -184,21 +187,41 @@ export function CustomPostButton() {
   const charCount = plain.length
   const isOver = charCount > CHAR_LIMIT
 
-  const previewUrl = useMemo(() => {
-    const params = new URLSearchParams({
-      templateId: 'tweet-card',
-      format,
-      postBody: markdown,
-      author: profile.authorName,
-      handle: profile.authorHandle,
-      avatarUrl: profile.authorAvatarUrl,
-      verified: 'true',
-      headline: '',
-      subheadline: '',
-      category: '',
-    })
-    return `/api/image-preview?${params.toString()}`
-  }, [markdown, format, profile])
+  const previewParams = useMemo(() => ({
+    templateId: 'tweet-card',
+    format,
+    postBody: markdown,
+    author: profile.authorName,
+    handle: profile.authorHandle,
+    avatarUrl: profile.authorAvatarUrl,
+    verified: true,
+    headline: '',
+    subheadline: '',
+    category: '',
+  }), [markdown, format, profile])
+
+  // Blob URL for the iframe preview
+  const [previewBlobUrl, setPreviewBlobUrl] = useState('')
+  const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (!markdown.trim()) { setPreviewBlobUrl(''); return }
+    if (previewTimer.current) clearTimeout(previewTimer.current)
+    previewTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/image-preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(previewParams),
+        })
+        if (!res.ok) return
+        const html = await res.text()
+        const blob = new Blob([html], { type: 'text/html' })
+        const url  = URL.createObjectURL(blob)
+        setPreviewBlobUrl(prev => { if (prev) URL.revokeObjectURL(prev); return url })
+      } catch { /* ignore */ }
+    }, 300)
+    return () => { if (previewTimer.current) clearTimeout(previewTimer.current) }
+  }, [previewParams, markdown])
 
   const download = async (ext: 'png' | 'jpg') => {
     if (!markdown.trim()) {
@@ -210,23 +233,11 @@ export function CustomPostButton() {
       const res = await fetch('/api/image-export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          templateId: 'tweet-card',
-          format,
-          postBody: markdown,
-          author: profile.authorName,
-          handle: profile.authorHandle,
-          avatarUrl: profile.authorAvatarUrl,
-          verified: true,
-          headline: '',
-          subheadline: '',
-          category: '',
-          ext,
-        }),
+        body: JSON.stringify({ ...previewParams, ext }),
       })
 
       if (res.status === 422) {
-        window.open(previewUrl, '_blank')
+        if (previewBlobUrl) window.open(previewBlobUrl, '_blank')
         toast({
           title: 'Chrome not found',
           description: 'Opened in browser — right-click to save.',
@@ -394,7 +405,7 @@ export function CustomPostButton() {
                 variant="secondary"
                 size="sm"
                 className="w-full gap-2"
-                onClick={() => window.open(previewUrl, '_blank')}
+                onClick={() => previewBlobUrl && window.open(previewBlobUrl, '_blank')}
                 disabled={!markdown.trim()}
               >
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -438,8 +449,8 @@ export function CustomPostButton() {
                     style={{ paddingBottom: ASPECT[format] }}
                   >
                     <iframe
-                      key={previewUrl}
-                      src={previewUrl}
+                      key={previewBlobUrl}
+                      src={previewBlobUrl}
                       className="absolute inset-0 w-full h-full border-0"
                       title="Custom post preview"
                     />
